@@ -32,9 +32,11 @@ export type RunDetail = RunMeta & {
 };
 export type Point = { id: string; x: number; y: number; cluster: number; title: string; year: number; cited_by: number; method: string };
 export type Graph = {
-  nodes: { id: string; label: string; degree: number; weight: number; component: number }[];
+  nodes: { id: string; label: string; degree: number; weight: number; component: number;
+    year?: number | null; cited_by?: number | null; doi?: string | null; publications?: number | null }[];
   links: { source: string; target: string; weight: number }[];
   summary: NetSummary;
+  max_weight: number;
 };
 export type Job = {
   id: string; run_id: string; status: "running" | "done" | "error"; stage: string; progress: number;
@@ -67,6 +69,7 @@ export const api = {
   runs: () => j<RunMeta[]>("/api/runs"),
   run: (id: string) => j<RunDetail>(`/api/runs/${id}`),
   points: (id: string) => j<Point[]>(`/api/runs/${id}/points`),
+  work: (id: string, wid: string) => j<Record<string, unknown>>(`/api/runs/${id}/work/${wid}`),
   network: (id: string, kind: string, top = 150) => j<Graph>(`/api/runs/${id}/network/${kind}?top=${top}`),
   works: (id: string, p: { offset?: number; limit?: number; cluster?: number; q?: string; sort?: string }) => {
     const qs = new URLSearchParams();

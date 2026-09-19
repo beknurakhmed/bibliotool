@@ -70,7 +70,9 @@ def clean(obj):
     return obj
 
 
-def graph_json(G: nx.Graph, top: int, labels: dict | None = None) -> dict:
+def graph_json(G: nx.Graph, top: int, info: dict | None = None, min_weight: int = 1) -> dict:
+    if min_weight > 1:
+        G = G.edge_subgraph([(u, v) for u, v, d in G.edges(data=True) if d["weight"] >= min_weight]).copy()
     if G.number_of_nodes() > top:
         keep = sorted(G.degree(weight="weight"), key=lambda x: x[1], reverse=True)[:top]
         G = G.subgraph([n for n, _ in keep]).copy()
@@ -78,12 +80,19 @@ def graph_json(G: nx.Graph, top: int, labels: dict | None = None) -> dict:
     for i, c in enumerate(sorted(nx.connected_components(G), key=len, reverse=True)):
         for n in c:
             comp[n] = i
-    labels = labels or {}
+    info = info or {}
+    nodes = []
+    for n in G.nodes:
+        meta = info.get(n, {})
+        nodes.append({"id": n, "label": meta.get("title") or n, "year": meta.get("year"),
+                      "cited_by": meta.get("cited_by"), "doi": meta.get("doi"),
+                      "publications": G.nodes[n].get("publications"),
+                      "degree": G.degree(n), "weight": G.degree(n, weight="weight"), "component": comp[n]})
     return {
-        "nodes": [{"id": n, "label": labels.get(n, n), "degree": G.degree(n),
-                   "weight": G.degree(n, weight="weight"), "component": comp[n]} for n in G.nodes],
+        "nodes": nodes,
         "links": [{"source": u, "target": v, "weight": d["weight"]} for u, v, d in G.edges(data=True)],
         "summary": networks.summarize(G),
+        "max_weight": max((d["weight"] for _, _, d in G.edges(data=True)), default=1),
     }
 
 
@@ -285,17 +294,40 @@ def points(run_id: str):
 
 
 @app.get("/api/runs/{run_id}/network/{kind}")
-def network(run_id: str, kind: str, top: int = 150):
+def network(run_id: str, kind: str, top: int = 150, min_weight: int = 1, resolve: bool = True):
+    """Сеть в JSON. Для коцитирования подписи узлов (цитируемых работ вне выборки)
+    подтягиваются из OpenAlex пакетами и кешируются (resolve=false — без запросов)."""
+    from bibliotool import labels as lab
     run = load_run(run_id)
-    titles = dict(zip(run.df["id"], run.df["title"].fillna("").str.slice(0, 90)))
+    own = {r["id"]: {"title": r["title"], "year": r["year"], "cited_by": r["cited_by"], "doi": r["doi"]}
+           for r in run.df[["id", "title", "year", "cited_by", "doi"]].to_dict(orient="records")}
     if kind == "coauthorship":
-        G = networks.coauthor_network(run.df)
-        return graph_json(G, top)
+        return clean(graph_json(networks.coauthor_network(run.df), top, {}, min_weight))
     if kind == "cocitation":
-        return graph_json(networks.cocitation_network(run.refs), top)
+        g = graph_json(networks.cocitation_network(run.refs), top, {}, min_weight)
+        ids = [n["id"] for n in g["nodes"]]
+        info = {**own, **(lab.resolve(ids) if resolve else {})}
+        return clean(graph_json(networks.cocitation_network(run.refs), top, info, min_weight))
     if kind == "coupling":
-        return graph_json(networks.coupling_network(run.refs), top, titles)
+        return clean(graph_json(networks.coupling_network(run.refs), top, own, min_weight))
     raise HTTPException(404, "kind: coauthorship | cocitation | coupling")
+
+
+@app.get("/api/runs/{run_id}/work/{work_id}")
+def work(run_id: str, work_id: str):
+    run = load_run(run_id)
+    row = run.df[run.df["id"] == work_id]
+    if row.empty:
+        raise HTTPException(404, "work not in sample")
+    rec = row.iloc[0].to_dict()
+    p = run_dir(run_id) / "semantic_docs.csv"
+    if p.exists():
+        sd = pd.read_csv(p)
+        m = sd[sd["id"] == work_id]
+        if not m.empty:
+            rec["cluster"] = int(m.iloc[0]["cluster"]); rec["method"] = m.iloc[0]["method"]
+    rec["references"] = run.refs.get(work_id, [])[:50]
+    return clean(rec)
 
 
 @app.post("/api/runs/{run_id}/bias")
