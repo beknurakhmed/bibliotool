@@ -88,11 +88,13 @@ class OpenAlexClient:
     def fetch(self, flt: str, mode: str = "sample", limit: int = 2000, seed: int = 42,
               progress: Callable[[int], None] | None = None) -> list[dict]:
         """
-        sample — случайная выборка с фиксированным seed (репрезентативна, воспроизводима)
-        recent — сортировка по дате публикации (современное состояние области)
+        sample    — случайная выборка с фиксированным seed (репрезентативна, воспроизводима)
+        recent    — сортировка по дате публикации (современное состояние области)
+        relevance — сортировка по релевантности: СМЕЩЁННАЯ выборка. Оставлена только для
+                    демонстрации эффекта (§5.1): исключает свежие и малоцитируемые работы.
         """
-        if mode not in ("sample", "recent"):
-            raise ValueError("mode должен быть 'sample' или 'recent'")
+        if mode not in ("sample", "recent", "relevance"):
+            raise ValueError("mode должен быть 'sample', 'recent' или 'relevance'")
         rows: list[dict] = []
         if mode == "sample":
             limit = min(limit, 10_000)  # ограничение sample в API
@@ -109,9 +111,10 @@ class OpenAlexClient:
                 page += 1
                 time.sleep(0.05)
         else:
+            sort = "publication_date:desc" if mode == "recent" else "relevance_score:desc"
             cursor = "*"
             while cursor and len(rows) < limit:
-                data = self.call({"filter": flt, "sort": "publication_date:desc",
+                data = self.call({"filter": flt, "sort": sort,
                                   "per_page": 100, "cursor": cursor, "select": SELECT})
                 rows.extend(data["results"])
                 cursor = data["meta"].get("next_cursor")

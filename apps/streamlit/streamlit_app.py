@@ -4,15 +4,13 @@
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parents[2]  # корень монорепозитория
 
 from bibliotool import networks, report, semantic  # noqa: E402
 from bibliotool.cli import slug  # noqa: E402
@@ -44,7 +42,7 @@ with st.sidebar:
 
     st.divider()
     st.header("Сохранённые прогоны")
-    runs_dir = ROOT / settings.runs_dir
+    runs_dir = Path(settings.runs_dir)
     saved = sorted([p.name for p in runs_dir.glob("*") if (p / "meta.json").exists()]) if runs_dir.exists() else []
     chosen = st.selectbox("Открыть", ["—"] + saved)
     if not settings.openalex_key:

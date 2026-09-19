@@ -123,7 +123,8 @@ def main(argv=None):
     r.add_argument("query")
     r.add_argument("--from", dest="year_from", type=int, default=2015)
     r.add_argument("--to", dest="year_to", type=int, default=2026)
-    r.add_argument("--mode", choices=["sample", "recent"], default="sample")
+    r.add_argument("--mode", choices=["sample", "recent", "relevance"], default="sample",
+                   help="relevance — смещённая выборка, только для демонстрации эффекта")
     r.add_argument("--limit", type=int, default=2000)
     r.add_argument("--out", help="папка результатов (по умолчанию runs/<query>_<годы>_<режим>)")
     r.add_argument("--semantic", action="store_true", help="выполнить семантический слой")

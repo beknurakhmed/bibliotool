@@ -1,0 +1,19 @@
+{
+  "name": "bibliotool-monorepo",
+  "private": true,
+  "version": "0.2.0",
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "setup": "pip install -r requirements.txt && pip install -e packages/core && npm install",
+    "build": "npm run build -w apps/web",
+    "start": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop ecosystem.config.js",
+    "restart": "pm2 restart ecosystem.config.js",
+    "logs": "pm2 logs",
+    "status": "pm2 status",
+    "dev:api": "python -m uvicorn apps.api.main:app --reload --port 8000",
+    "dev:web": "npm run dev -w apps/web",
+    "test": "python -m pytest packages/core/tests -q"
+  },
+  "devDependencies": { "pm2": "^6.0.0" }
+}
