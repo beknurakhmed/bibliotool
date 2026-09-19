@@ -54,10 +54,25 @@ def reduce_2d(vec: np.ndarray) -> tuple[np.ndarray, str]:
 # ----------------------------------------------------------------- кластеризация
 
 
+def _assign_outliers(vec: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Точки-выбросы HDBSCAN (-1) относим к ближайшему центроиду (косинусная близость).
+    Как reduce_outliers в BERTopic: структура — от плотностной кластеризации, но ни один
+    документ не теряется."""
+    labels = labels.copy()
+    ids = sorted(set(labels) - {-1})
+    if not ids or not (labels == -1).any():
+        return labels
+    cents = normalize(np.vstack([vec[labels == c].mean(axis=0) for c in ids]))
+    noise = np.where(labels == -1)[0]
+    sims = normalize(vec[noise]) @ cents.T
+    labels[noise] = np.asarray(ids)[sims.argmax(axis=1)]
+    return labels
+
+
 def cluster(vec: np.ndarray, min_cluster_size: int | None = None, log=print) -> tuple[np.ndarray, str]:
-    """HDBSCAN (шум = -1); если распалось на шум — KMeans как запасной вариант."""
+    """UMAP → HDBSCAN; выбросы относятся к ближайшему кластеру. Если структура не найдена — KMeans."""
     n = len(vec)
-    min_cluster_size = min_cluster_size or max(8, int(np.sqrt(n) / 2))
+    min_cluster_size = min_cluster_size or int(np.clip(n / 100, 8, 30))
     # снижаем размерность перед плотностной кластеризацией
     dim = min(20, vec.shape[1], n - 1)
     try:
@@ -69,14 +84,16 @@ def cluster(vec: np.ndarray, min_cluster_size: int | None = None, log=print) -> 
 
     try:
         from sklearn.cluster import HDBSCAN
-        labels = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=5).fit_predict(low)
-        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        noise = float((labels == -1).mean())
-        if n_clusters >= 2 and noise < 0.6:
-            return labels, f"hdbscan(min_cluster_size={min_cluster_size})"
-        log(f"HDBSCAN: кластеров {n_clusters}, шум {noise:.0%} — переключаюсь на KMeans")
+        for method in ("eom", "leaf"):
+            raw = HDBSCAN(min_cluster_size=min_cluster_size, cluster_selection_method=method).fit_predict(low)
+            n_clusters = len(set(raw)) - (1 if -1 in raw else 0)
+            noise = float((raw == -1).mean())
+            if n_clusters >= 4 and noise < 0.7:
+                log(f"HDBSCAN/{method}: кластеров {n_clusters}, выбросов {noise:.0%} → отнесены к ближайшему кластеру")
+                return _assign_outliers(vec, raw), f"hdbscan-{method}(min_cluster_size={min_cluster_size}, outliers={noise:.0%})"
+            log(f"HDBSCAN/{method}: кластеров {n_clusters}, выбросов {noise:.0%} — недостаточно структуры")
     except Exception as e:
-        log(f"HDBSCAN недоступен ({type(e).__name__}) — KMeans")
+        log(f"HDBSCAN недоступен ({type(e).__name__})")
 
     from sklearn.cluster import KMeans
     k = int(np.clip(np.sqrt(n / 2), 4, 25))
