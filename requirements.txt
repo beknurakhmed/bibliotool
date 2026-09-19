@@ -1,0 +1,13 @@
+requests>=2.31
+pandas>=2.0
+numpy>=1.26
+networkx>=3.2
+scikit-learn>=1.4
+python-dotenv>=1.0
+matplotlib>=3.8
+sentence-transformers>=2.7   # семантический слой; без него — TF-IDF fallback
+ollama>=0.3                  # локальный LLM
+anthropic>=0.49              # альтернативный LLM
+streamlit>=1.35              # UI
+plotly>=5.20                 # интерактивные графики в UI
+umap-learn>=0.5              # опционально: лучшая 2D-проекция
